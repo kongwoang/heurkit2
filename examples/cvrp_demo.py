@@ -6,9 +6,7 @@ Usage:
     python examples/cvrp_demo.py
 """
 
-import sys
-import os
-
+import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from heurkit.kernels.cvrp.problem import CVRPProblem
@@ -17,6 +15,7 @@ from heurkit.algorithms.hill_climb import HillClimbing
 from heurkit.algorithms.simulated_annealing import SimulatedAnnealing
 from heurkit.algorithms.tabu import TabuSearch
 from heurkit.algorithms.iterated_local_search import IteratedLocalSearch
+from heurkit.algorithms.vns import VariableNeighborhoodSearch
 from heurkit.utils.metrics import results_table
 
 
@@ -25,41 +24,24 @@ def main() -> None:
     print("  HeurKit — CVRP Demo")
     print("=" * 60)
 
-    # Generate a random CVRP instance
     problem = CVRPProblem.generate_random(n_customers=20, capacity=50.0, seed=42)
     print(f"\nProblem: {problem.name()} ({problem.size()} customers, cap={problem.capacity})\n")
 
+    algorithms = [
+        ("Greedy",       GreedyConstructor()),
+        ("Hill Climb",   HillClimbing(time_limit=2.0, seed=42)),
+        ("Sim. Anneal.", SimulatedAnnealing(time_limit=2.0, seed=42)),
+        ("Tabu Search",  TabuSearch(time_limit=2.0, seed=42)),
+        ("ILS",          IteratedLocalSearch(time_limit=2.0, seed=42)),
+        ("VNS",          VariableNeighborhoodSearch(time_limit=2.0, seed=42)),
+    ]
+
     results = []
-
-    # 1. Greedy constructor
-    greedy = GreedyConstructor()
-    result = greedy.solve(problem)
-    results.append(result)
-    print(f"  Greedy:       {result.best_objective:.2f}  (feasible={result.is_feasible})")
-
-    # 2. Hill Climbing
-    hc = HillClimbing(max_seconds=2.0, seed=42)
-    result = hc.solve(problem)
-    results.append(result)
-    print(f"  Hill Climb:   {result.best_objective:.2f}  (feasible={result.is_feasible})")
-
-    # 3. Simulated Annealing
-    sa = SimulatedAnnealing(max_seconds=2.0, seed=42)
-    result = sa.solve(problem)
-    results.append(result)
-    print(f"  SA:           {result.best_objective:.2f}  (feasible={result.is_feasible})")
-
-    # 4. Tabu Search
-    ts = TabuSearch(max_seconds=2.0, seed=42)
-    result = ts.solve(problem)
-    results.append(result)
-    print(f"  Tabu:         {result.best_objective:.2f}  (feasible={result.is_feasible})")
-
-    # 5. ILS
-    ils = IteratedLocalSearch(max_seconds=2.0, seed=42)
-    result = ils.solve(problem)
-    results.append(result)
-    print(f"  ILS:          {result.best_objective:.2f}  (feasible={result.is_feasible})")
+    for label, algo in algorithms:
+        result = algo.solve(problem)
+        results.append(result)
+        feas = "✓" if result.is_feasible else "✗"
+        print(f"  {label:<14s}  obj={result.best_objective:>8.2f}  {feas}  ({result.runtime_seconds:.2f}s)")
 
     print(f"\n{results_table(results)}")
 

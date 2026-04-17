@@ -26,6 +26,11 @@ class TSPProblem(Problem):
         (n, 2) array of city coordinates (kept for plotting).
     instance_name : str
         Optional name for logging.
+
+    Raises
+    ------
+    ValueError
+        If the distance matrix is not square, or has fewer than 3 cities.
     """
 
     def __init__(
@@ -34,6 +39,15 @@ class TSPProblem(Problem):
         coordinates: NDArray | None = None,
         instance_name: str = "TSP",
     ) -> None:
+        distance_matrix = np.asarray(distance_matrix, dtype=float)
+        if distance_matrix.ndim != 2 or distance_matrix.shape[0] != distance_matrix.shape[1]:
+            raise ValueError(
+                f"Distance matrix must be square, got shape {distance_matrix.shape}"
+            )
+        if distance_matrix.shape[0] < 3:
+            raise ValueError(
+                f"TSP requires at least 3 cities, got {distance_matrix.shape[0]}"
+            )
         self.distance_matrix = distance_matrix
         self.coordinates = coordinates
         self.instance_name = instance_name
@@ -50,12 +64,8 @@ class TSPProblem(Problem):
         """Create a TSP from 2-D coordinates using Euclidean distances."""
         coords = np.asarray(coords, dtype=float)
         n = len(coords)
-        dist = np.zeros((n, n))
-        for i in range(n):
-            for j in range(i + 1, n):
-                d = float(np.linalg.norm(coords[i] - coords[j]))
-                dist[i, j] = d
-                dist[j, i] = d
+        diff = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
+        dist = np.sqrt(np.sum(diff ** 2, axis=2))
         return cls(dist, coordinates=coords, instance_name=instance_name)
 
     @classmethod
@@ -68,7 +78,7 @@ class TSPProblem(Problem):
     def generate_random(
         cls, n_cities: int = 20, seed: int | None = None
     ) -> TSPProblem:
-        """Generate a random TSP in the unit square."""
+        """Generate a random TSP in [0, 100]²."""
         rng = np.random.default_rng(seed)
         coords = rng.random((n_cities, 2)) * 100
         return cls.from_coordinates(coords, instance_name=f"TSP-rand-{n_cities}")

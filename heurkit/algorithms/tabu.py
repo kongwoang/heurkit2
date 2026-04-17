@@ -6,18 +6,21 @@ Maintains a short-term memory of recent move labels to prevent cycling.
 
 from __future__ import annotations
 
-import time
+import logging
 from collections import deque
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence
 
 from heurkit.core.result import SearchResult
 from heurkit.core.runtime import SearchAlgorithm
 from heurkit.core.stopping import StoppingCriteria
 
 if TYPE_CHECKING:
+    from heurkit.core.callbacks import SearchCallback
     from heurkit.core.evaluator import Evaluator
     from heurkit.core.problem import Problem
     from heurkit.core.runtime import Constructor, NeighborhoodGenerator
+
+logger = logging.getLogger("heurkit.algorithms")
 
 
 class TabuSearch(SearchAlgorithm):
@@ -35,6 +38,8 @@ class TabuSearch(SearchAlgorithm):
         Stagnation limit.
     seed : int or None
         Random seed.
+    time_limit : float or None
+        Alias for *max_seconds*.
     """
 
     def __init__(
@@ -49,7 +54,7 @@ class TabuSearch(SearchAlgorithm):
         self.tabu_tenure = tabu_tenure
         self.stopping = StoppingCriteria(
             max_iterations=max_iterations,
-            max_seconds=time_limit or max_seconds,
+            max_seconds=time_limit if time_limit is not None else max_seconds,
             no_improvement_iterations=no_improvement_limit,
         )
         self.seed = seed
@@ -61,7 +66,9 @@ class TabuSearch(SearchAlgorithm):
         constructor: Constructor | None = None,
         evaluator: Evaluator | None = None,
         neighborhood: NeighborhoodGenerator | None = None,
+        callbacks: Sequence[SearchCallback] | None = None,
     ) -> SearchResult:
+        cbs = callbacks or []
         constructor, evaluator, neighborhood = self._resolve_components(
             problem, constructor, evaluator, neighborhood
         )
@@ -73,6 +80,7 @@ class TabuSearch(SearchAlgorithm):
         history: list[float] = [best_eval.objective]
 
         tabu_list: deque[str] = deque(maxlen=self.tabu_tenure)
+        logger.info("TabuSearch started on %s (tenure=%d, obj=%.4f)", problem.name(), self.tabu_tenure, best_eval.objective)
         self.stopping.start()
 
         while not self.stopping.should_stop():
@@ -108,9 +116,13 @@ class TabuSearch(SearchAlgorithm):
                     best = current.copy()
                     best_eval = current_eval
                     improved = True
+                    self._fire_new_best(cbs, self.stopping.iteration, best, best_eval)
 
             self.stopping.step(improved)
+            self._fire_iteration(cbs, self.stopping.iteration, current, current_eval, best, best_eval)
             history.append(best_eval.objective)
+
+        logger.info("TabuSearch finished: obj=%.4f iters=%d", best_eval.objective, self.stopping.iteration)
 
         return SearchResult(
             algorithm_name="TabuSearch",

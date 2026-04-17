@@ -1,287 +1,361 @@
 # HeurKit
 
-A heuristic optimization framework with a **shared metaheuristic runtime** and **domain-specific kernels** for combinatorial optimization problems.
+A lightweight Python framework for heuristic optimization of combinatorial problems.
 
-## Design Goal
+**One shared runtime. Multiple problem kernels. Consistent API.**
 
-HeurKit demonstrates a clean architectural pattern:
+---
 
-> **Generic search algorithms + domain-specific problem kernels = one framework, many problems.**
+## Why HeurKit?
 
-The core runtime knows nothing about cities, routes, or bins. It operates entirely through abstract interfaces (`Problem`, `Solution`, `Move`, `Evaluator`). Each problem domain implements its own *kernel* — a self-contained module that defines the solution representation, move operators, evaluators, and constructors for that specific problem type.
+Most heuristic optimization code is written as **monolithic, single-problem scripts** — the algorithm logic is tangled with the domain representation, making it hard to reuse, benchmark, or extend.
 
-This means the same Simulated Annealing or Tabu Search implementation runs unchanged across TSP, CVRP, and Bin Packing.
+HeurKit separates these concerns:
 
-## Key Architecture
+| Layer | Responsibility | Domain-aware? |
+|-------|---------------|:---:|
+| **Algorithms** | Search logic (SA, Tabu, VNS, …) | ❌ No |
+| **Kernels** | Solution structure, moves, evaluation | ✅ Yes |
+| **Core** | Interfaces, stopping criteria, results | ❌ No |
+
+The same Simulated Annealing implementation runs **unchanged** on TSP, CVRP, and Bin Packing — because it only interacts with abstract `Solution`, `Move`, and `Evaluator` interfaces. The domain-specific logic lives entirely in swappable **kernels**.
+
+This is not a production solver. It's a **clean framework prototype** for learning, presenting, and extending.
+
+---
+
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    User API                          │
-│   solver.solve(problem) → SearchResult              │
-├─────────────────────────────────────────────────────┤
-│              Portfolio / AutoSolver                   │
-│   Picks algorithms + presets per problem type        │
+│                  User API                            │
+│   AutoSolver · Benchmark Runner · Examples           │
 ├─────────────────────────────────────────────────────┤
 │            Generic Search Algorithms                 │
-│   Hill Climbing · Tabu · SA · ILS · Greedy          │
+│   Hill Climbing · Tabu · SA · ILS · VNS · Greedy    │
 │   (domain-agnostic — uses abstract interfaces)      │
 ├──────────┬──────────┬───────────────────────────────┤
-│ TSP      │ CVRP     │ Bin Packing                   │
-│ Kernel   │ Kernel   │ Kernel                        │
+│  TSP     │  CVRP    │  Bin Packing                  │
+│  Kernel  │  Kernel  │  Kernel                       │
 │          │          │                               │
-│ ·Solution│ ·Solution│ ·Solution                     │
-│ ·Moves   │ ·Moves   │ ·Moves                       │
-│ ·Eval    │ ·Eval    │ ·Eval                         │
-│ ·Constr  │ ·Constr  │ ·Constr                       │
+│  Solution│  Solution│  Solution                     │
+│  Moves   │  Moves   │  Moves                       │
+│  Eval    │  Eval    │  Eval                         │
+│  Constr  │  Constr  │  Constr                       │
 ├──────────┴──────────┴───────────────────────────────┤
 │              Core Abstractions                       │
 │   Problem · Solution · Move · Evaluator             │
-│   StoppingCriteria · SearchResult · RNG             │
+│   StoppingCriteria · SearchResult · Callbacks       │
 └─────────────────────────────────────────────────────┘
 ```
 
-## Supported Problems (MVP)
+---
 
-| Problem | Type | Objective |
-|---------|------|-----------|
-| **TSP** | Symmetric Travelling Salesman | Minimize tour distance |
-| **CVRP** | Capacitated Vehicle Routing | Minimize total route distance |
-| **Bin Packing** | 1-D Bin Packing | Minimize number of bins |
+## Supported Problems
 
-## Folder Structure
+| Problem | Description | Objective |
+|---------|-------------|-----------|
+| **TSP** | Symmetric Travelling Salesman | Minimise tour distance |
+| **CVRP** | Capacitated Vehicle Routing | Minimise total route distance |
+| **Bin Packing** | 1-D Bin Packing | Minimise number of bins |
 
-```
-heurkit/
-├── core/                    # Domain-agnostic abstractions
-│   ├── problem.py           # Abstract Problem
-│   ├── solution.py          # Abstract Solution
-│   ├── move.py              # Abstract Move
-│   ├── evaluator.py         # Evaluator + Evaluation
-│   ├── runtime.py           # SearchAlgorithm base + protocols
-│   ├── result.py            # SearchResult dataclass
-│   ├── stopping.py          # Reusable stopping criteria
-│   ├── callbacks.py         # Optional search callbacks
-│   └── random_state.py      # Deterministic RNG
-│
-├── algorithms/              # Generic search algorithms
-│   ├── greedy.py            # Constructor wrapper
-│   ├── hill_climb.py        # First-improvement hill climbing
-│   ├── tabu.py              # Tabu search
-│   ├── simulated_annealing.py
-│   └── iterated_local_search.py
-│
-├── kernels/                 # Domain-specific problem kernels
-│   ├── tsp/                 # TSP kernel
-│   │   ├── problem.py       #   Problem definition
-│   │   ├── solution.py      #   Tour permutation
-│   │   ├── evaluator.py     #   Tour distance evaluator
-│   │   ├── moves.py         #   Swap, 2-opt, insert
-│   │   ├── constructors.py  #   Random, nearest-neighbour
-│   │   └── neighbors.py     #   Neighbourhood generator
-│   ├── cvrp/                # CVRP kernel
-│   │   ├── problem.py
-│   │   ├── solution.py      #   List of routes
-│   │   ├── evaluator.py     #   Distance + capacity penalty
-│   │   ├── moves.py         #   Relocate, swap, intra-2opt
-│   │   ├── constructors.py  #   Greedy sequential, random
-│   │   └── neighbors.py
-│   └── binpacking/          # Bin Packing kernel
-│       ├── problem.py
-│       ├── solution.py      #   List of bins
-│       ├── evaluator.py     #   Bin count + overflow penalty
-│       ├── moves.py         #   Move item, swap items
-│       ├── constructors.py  #   First Fit, First Fit Decreasing
-│       └── neighbors.py
-│
-├── portfolio/               # Auto-solver layer
-│   ├── auto.py              # AutoSolver
-│   └── presets.py           # Default algorithm configs
-│
-└── utils/                   # Utilities
-    ├── distance.py          # Distance matrix helpers
-    ├── metrics.py           # Result formatting
-    ├── plotting.py          # Convergence plots
-    └── io.py                # Instance generators
+## Supported Algorithms
 
-examples/                    # Runnable demos
-tests/                       # pytest test suite
-```
+| Algorithm | Type | Key Idea |
+|-----------|------|----------|
+| `GreedyConstructor` | Construction | One-shot baseline |
+| `HillClimbing` | Local Search | First-improvement descent |
+| `TabuSearch` | Local Search | Short-term memory avoids cycling |
+| `SimulatedAnnealing` | Metaheuristic | Probabilistic acceptance with cooling |
+| `IteratedLocalSearch` | Metaheuristic | Perturbation + local search |
+| `VariableNeighborhoodSearch` | Metaheuristic | Systematic neighbourhood switching |
+
+All algorithms share the same interface and accept: `time_limit`, `max_iterations`, `seed`, `callbacks`.
+
+---
 
 ## Installation
 
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd heurkit
-
-# Install dependencies
+git clone https://github.com/kongwoang/heurkit2.git
+cd heurkit2
+pip install -e .          # editable install
+# or just:
 pip install -r requirements.txt
-
-# Optional: install in development mode
-pip install -e .
 ```
 
-**Requirements:** Python 3.11+, numpy. Optional: matplotlib (plotting), pytest (tests).
+**Requirements:** Python 3.11+, numpy. Optional: matplotlib (plots), pytest (tests).
+
+---
 
 ## Quickstart
 
-### TSP
+### Solve a TSP in 3 lines
 
 ```python
 from heurkit.kernels.tsp.problem import TSPProblem
 from heurkit.algorithms.simulated_annealing import SimulatedAnnealing
 
-# Create a random 30-city TSP
 problem = TSPProblem.generate_random(n_cities=30, seed=42)
-
-# Solve with Simulated Annealing
-solver = SimulatedAnnealing(max_seconds=2.0, seed=42)
-result = solver.solve(problem)
-
-print(result.best_objective)  # Total tour distance
-print(result)                 # Full summary
+result = SimulatedAnnealing(time_limit=2.0, seed=42).solve(problem)
+print(result)  # objective, feasibility, iterations, runtime
 ```
 
-### CVRP
+### Solve CVRP
 
 ```python
 from heurkit.kernels.cvrp.problem import CVRPProblem
 from heurkit.algorithms.tabu import TabuSearch
 
 problem = CVRPProblem.generate_random(n_customers=20, capacity=50.0, seed=42)
-
-solver = TabuSearch(max_seconds=2.0, seed=42)
-result = solver.solve(problem)
-
-print(f"Distance: {result.best_objective:.2f}")
-print(f"Feasible: {result.is_feasible}")
+result = TabuSearch(time_limit=2.0, seed=42).solve(problem)
+print(f"Distance: {result.best_objective:.2f}, Feasible: {result.is_feasible}")
 ```
 
-### Bin Packing
+### Solve Bin Packing
 
 ```python
 from heurkit.kernels.binpacking.problem import BinPackingProblem
-from heurkit.algorithms.hill_climb import HillClimbing
+from heurkit.algorithms.vns import VariableNeighborhoodSearch
 
 problem = BinPackingProblem.generate_random(n_items=40, capacity=100.0, seed=42)
-
-solver = HillClimbing(max_seconds=2.0, seed=42)
-result = solver.solve(problem)
-
-print(f"Bins used: {result.best_objective:.0f}")
+result = VariableNeighborhoodSearch(time_limit=2.0, seed=42).solve(problem)
+print(f"Bins: {result.best_objective:.0f}")
 ```
 
-### Custom Instance
-
-```python
-from heurkit.kernels.tsp.problem import TSPProblem
-
-coords = [(0, 0), (10, 0), (10, 10), (0, 10), (5, 5)]
-problem = TSPProblem.from_coordinates(coords, instance_name="my-tsp")
-```
-
-## Available Algorithms
-
-| Algorithm | Description | Key Parameters |
-|-----------|-------------|---------------|
-| `GreedyConstructor` | One-shot construction (baseline) | — |
-| `HillClimbing` | First-improvement local search | `max_seconds`, `no_improvement_limit` |
-| `TabuSearch` | Short-term memory search | `tabu_tenure`, `max_seconds` |
-| `SimulatedAnnealing` | Probabilistic acceptance with cooling | `initial_temp`, `cooling_rate` |
-| `IteratedLocalSearch` | Local search + perturbation | `perturbation_strength`, `local_search_iters` |
-
-All algorithms share the same interface:
-
-```python
-result = algorithm.solve(problem)
-```
-
-Every algorithm accepts: `max_seconds`, `max_iterations`, `seed`.
-Every algorithm returns a `SearchResult` with: `best_objective`, `best_solution`, `is_feasible`, `iterations`, `runtime_seconds`, `history`.
-
-## AutoSolver / Presets
-
-The `AutoSolver` picks sensible algorithm presets per problem type and returns the best result:
+### AutoSolver — automatic algorithm selection
 
 ```python
 from heurkit.portfolio.auto import AutoSolver
 
-# Automatically detects problem type from the class
+# Works on any supported problem type — auto-detects from class
 result = AutoSolver(time_limit=3.0, seed=42).solve(problem)
-
-# Or specify explicitly
-result = AutoSolver(problem_type="tsp", time_limit=3.0).solve(problem)
 ```
 
-**Default presets:**
+---
 
-| Problem | Algorithms |
-|---------|-----------|
-| TSP | Hill Climbing + Simulated Annealing |
-| CVRP | Hill Climbing + Tabu Search |
-| Bin Packing | Hill Climbing + Iterated Local Search |
+## Benchmarking
 
-## Running Tests
+HeurKit includes a benchmark runner for reproducible algorithm comparisons:
 
-```bash
-# Run all tests
-pytest tests/ -v
+```python
+from heurkit.benchmark.runner import BenchmarkConfig, run_benchmark
+from heurkit.kernels.tsp.problem import TSPProblem
+from heurkit.algorithms import HillClimbing, SimulatedAnnealing, TabuSearch
 
-# Run tests for a specific domain
-pytest tests/test_tsp.py -v
-pytest tests/test_cvrp.py -v
-pytest tests/test_binpacking.py -v
+config = BenchmarkConfig(
+    name="tsp_comparison",
+    problems=[TSPProblem.generate_random(n_cities=30, seed=i) for i in range(3)],
+    algorithms=[
+        HillClimbing(time_limit=2.0, seed=42),
+        SimulatedAnnealing(time_limit=2.0, seed=42),
+        TabuSearch(time_limit=2.0, seed=42),
+    ],
+    output_dir="output",
+)
 
-# Run algorithm cross-domain tests
-pytest tests/test_algorithms.py -v
+bench = run_benchmark(config)
+print(bench.summary_table())
+# Results auto-saved to output/tsp_comparison.csv and .json
 ```
 
-## Running Demo / Benchmark Scripts
+### Run the built-in benchmark
 
 ```bash
-# Individual problem demos
-python examples/tsp_demo.py
-python examples/cvrp_demo.py
-python examples/binpacking_demo.py
-
-# Cross-domain comparison (all problems × all algorithms)
 python examples/compare_algorithms.py
 ```
 
-The benchmark script prints summary tables and saves convergence plots (requires matplotlib).
+---
 
-## Stopping Criteria
+## AutoSolver — Presets & Customisation
 
-Algorithms support composable stopping criteria:
+```python
+from heurkit.portfolio.auto import AutoSolver
 
-- **`max_iterations`** — stop after N iterations
-- **`max_seconds`** — stop after wall-clock time limit
-- **`no_improvement_iterations`** — stop if no improvement for N iterations
+# List all available presets
+print(AutoSolver.available_presets())
+# {'tsp': ['HillClimbing', 'SimulatedAnnealing', ...], ...}
 
-The search stops when **any** criterion fires.
+# Use default presets
+result = AutoSolver(time_limit=5.0, seed=42).solve(problem)
+
+# Override with custom picks
+result = AutoSolver(
+    time_limit=5.0, seed=42,
+    picks=["TabuSearch", "VNS"],
+).solve(problem)
+
+# Get all trial results
+result = AutoSolver(time_limit=5.0, seed=42, return_all=True).solve(problem)
+print(result.metadata["all_results"])
+```
+
+---
+
+## Callbacks & Observability
+
+```python
+from heurkit.algorithms.hill_climb import HillClimbing
+from heurkit.core.callbacks import PrintCallback, LoggingCallback, HistoryCallback
+
+# Print progress every 100 iterations
+result = HillClimbing(time_limit=2.0).solve(problem, callbacks=[PrintCallback(100)])
+
+# Use Python logging
+result = HillClimbing(time_limit=2.0).solve(problem, callbacks=[LoggingCallback(500)])
+
+# Record improvement events programmatically
+cb = HistoryCallback()
+result = HillClimbing(time_limit=2.0).solve(problem, callbacks=[cb])
+print(cb.events)  # [{iteration: 5, objective: 42.3, ...}, ...]
+```
+
+---
+
+## Repository Structure
+
+```
+heurkit/
+├── core/                    # Domain-agnostic abstractions
+│   ├── problem.py           #   Abstract Problem
+│   ├── solution.py          #   Abstract Solution
+│   ├── move.py              #   Abstract Move
+│   ├── evaluator.py         #   Evaluator + Evaluation
+│   ├── runtime.py           #   SearchAlgorithm base + protocols
+│   ├── result.py            #   SearchResult with serialisation
+│   ├── stopping.py          #   Composable stopping criteria
+│   ├── callbacks.py         #   Print / Logging / History callbacks
+│   └── random_state.py      #   Deterministic RNG factory
+│
+├── algorithms/              # Generic search algorithms
+│   ├── greedy.py            #   Constructor wrapper
+│   ├── hill_climb.py        #   First-improvement hill climbing
+│   ├── tabu.py              #   Tabu search
+│   ├── simulated_annealing.py
+│   ├── iterated_local_search.py
+│   └── vns.py               #   Variable Neighbourhood Search
+│
+├── kernels/                 # Domain-specific problem kernels
+│   ├── tsp/                 #   Travelling Salesman Problem
+│   ├── cvrp/                #   Capacitated Vehicle Routing
+│   └── binpacking/          #   1-D Bin Packing
+│
+├── portfolio/               # Auto-solver layer
+│   ├── auto.py              #   AutoSolver
+│   └── presets.py            #   Algorithm presets per problem type
+│
+├── benchmark/               # Benchmark runner
+│   └── runner.py            #   BenchmarkConfig → BenchmarkResult
+│
+└── utils/                   # Utilities
+    ├── metrics.py           #   ASCII table formatting
+    ├── plotting.py          #   Convergence plots (matplotlib)
+    ├── distance.py          #   Distance helpers
+    └── io.py                #   Instance generators
+
+examples/                    # Runnable demos
+tests/                       # pytest test suite (90+ tests)
+```
+
+---
+
+## How to Extend
+
+### Adding a New Kernel (Problem Type)
+
+1. Create `heurkit/kernels/your_problem/`
+2. Implement these files following the existing pattern:
+
+| File | Implements | Purpose |
+|------|-----------|---------|
+| `problem.py` | `Problem` ABC | Instance data + factory methods + `default_*()` |
+| `solution.py` | `Solution` ABC | Solution representation + `copy()` |
+| `evaluator.py` | `Evaluator` ABC | Objective + feasibility computation |
+| `moves.py` | `Move` ABC | Concrete move operators |
+| `constructors.py` | `Constructor` protocol | Initial solution builders |
+| `neighbors.py` | `NeighborhoodGenerator` protocol | Move sampling logic |
+
+3. Add the problem type to `portfolio/presets.py`
+4. All existing algorithms will work automatically
+
+### Adding a New Algorithm
+
+1. Create `heurkit/algorithms/your_algo.py`
+2. Subclass `SearchAlgorithm` and implement `solve()`
+3. Use `self._resolve_components()` to get constructor/evaluator/neighbourhood
+4. Use `StoppingCriteria` for consistent stopping
+5. Return a `SearchResult`
+6. Call `self._fire_new_best()` and `self._fire_iteration()` for callback support
+
+---
+
+## Running
+
+```bash
+# Run all tests
+make test
+# or: pytest tests/ -v
+
+# Run individual demos
+make examples
+
+# Run benchmark
+make benchmark
+
+# Clean up
+make clean
+```
+
+---
+
+## Result Serialisation
+
+```python
+result = algo.solve(problem)
+
+# To dict (excludes solution object)
+d = result.to_dict()
+
+# To JSON string
+j = result.to_json()
+```
+
+---
+
+## Input Validation
+
+All problem constructors validate inputs and raise `ValueError` with clear messages:
+
+```python
+TSPProblem(np.zeros((2, 2)))      # ValueError: TSP requires at least 3 cities
+CVRPProblem(..., capacity=0)       # ValueError: Vehicle capacity must be positive
+BinPackingProblem(np.array([200]), bin_capacity=100)  # ValueError: exceeds bin capacity
+```
+
+---
 
 ## Current Limitations
 
-This is an MVP designed to demonstrate the architecture. Known limitations:
-
-- **Not production-optimized.** Move evaluation is full re-evaluation (no incremental/delta updates).
-- **Small instances only.** Designed for instances with tens to low hundreds of entities.
+- **Not production-optimized.** Full re-evaluation per move (no delta evaluation).
+- **Small instances.** Designed for tens to low hundreds of entities.
 - **Simple algorithm implementations.** Correct and readable, not state-of-the-art.
 - **No parallel execution.** All algorithms run sequentially.
-- **CVRP is simplified.** No time windows, pickup-delivery, or heterogeneous fleets.
-- **No TSPLIB / standard format parsing.** Only random generators and manual construction.
+- **No standard format I/O.** No TSPLIB/CVRPLIB parsers (only random generators).
 
-## Future Extensions
+---
 
-The architecture is designed to be extended along these axes:
+## Roadmap
 
-- **New kernels:** Job Shop Scheduling, Knapsack, Graph Coloring, etc.
-- **New algorithms:** Genetic Algorithm, GRASP, Variable Neighbourhood Search, etc.
-- **Incremental evaluation:** Delta-evaluation for faster move assessment.
-- **Parallel portfolio:** Run multiple algorithms concurrently and take the best.
-- **Instance I/O:** TSPLIB, CVRPLIB, OR-Library format parsers.
-- **ML-based algorithm selection:** Use instance features to pick the best algorithm.
-- **Richer visualization:** Interactive tour/route/packing plots.
+- [ ] Delta evaluation for faster inner loops
+- [ ] Large Neighbourhood Search (LNS) with pluggable destroy/repair
+- [ ] Standard instance format parsers (TSPLIB, CVRPLIB, OR-Library)
+- [ ] Additional kernels: Job Shop Scheduling, Knapsack
+- [ ] Parallel portfolio execution
+- [ ] CLI with `typer` for running benchmarks from the command line
+- [ ] Sphinx API documentation
+- [ ] GitHub Actions CI
+
+---
 
 ## License
 

@@ -8,19 +8,26 @@ Useful for baselines and for the portfolio layer.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence
 
 from heurkit.core.result import SearchResult
 from heurkit.core.runtime import SearchAlgorithm
 
 if TYPE_CHECKING:
+    from heurkit.core.callbacks import SearchCallback
     from heurkit.core.evaluator import Evaluator
     from heurkit.core.problem import Problem
     from heurkit.core.runtime import Constructor, NeighborhoodGenerator
 
 
 class GreedyConstructor(SearchAlgorithm):
-    """Wraps any Constructor as a one-shot algorithm."""
+    """Wraps any Constructor as a one-shot algorithm.
+
+    Parameters
+    ----------
+    seed : int or None
+        Random seed (unused but kept for interface consistency).
+    """
 
     def __init__(self, seed: int | None = None, **kwargs) -> None:
         self.seed = seed
@@ -32,6 +39,7 @@ class GreedyConstructor(SearchAlgorithm):
         constructor: Constructor | None = None,
         evaluator: Evaluator | None = None,
         neighborhood: NeighborhoodGenerator | None = None,
+        callbacks: Sequence[SearchCallback] | None = None,
     ) -> SearchResult:
         constructor, evaluator, _ = self._resolve_components(
             problem, constructor, evaluator, neighborhood

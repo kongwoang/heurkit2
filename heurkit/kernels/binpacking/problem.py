@@ -19,11 +19,16 @@ class BinPackingProblem(Problem):
     Parameters
     ----------
     item_sizes : NDArray
-        Size of each item.
+        Size of each item (all must be positive and ≤ capacity).
     bin_capacity : float
-        Capacity of every bin.
+        Capacity of every bin (must be positive).
     instance_name : str
         Name for logging.
+
+    Raises
+    ------
+    ValueError
+        If inputs are invalid.
     """
 
     def __init__(
@@ -32,7 +37,19 @@ class BinPackingProblem(Problem):
         bin_capacity: float,
         instance_name: str = "BinPacking",
     ) -> None:
-        self.item_sizes = np.asarray(item_sizes, dtype=float)
+        item_sizes = np.asarray(item_sizes, dtype=float)
+        if bin_capacity <= 0:
+            raise ValueError(f"Bin capacity must be positive, got {bin_capacity}")
+        if len(item_sizes) == 0:
+            raise ValueError("At least one item is required")
+        if np.any(item_sizes <= 0):
+            raise ValueError("All item sizes must be positive")
+        if np.any(item_sizes > bin_capacity):
+            raise ValueError(
+                f"Item size {np.max(item_sizes):.1f} exceeds bin capacity {bin_capacity}"
+            )
+
+        self.item_sizes = item_sizes
         self.bin_capacity = float(bin_capacity)
         self.instance_name = instance_name
         self.n_items: int = len(self.item_sizes)
@@ -57,7 +74,8 @@ class BinPackingProblem(Problem):
     ) -> BinPackingProblem:
         """Generate a random 1D bin packing instance."""
         rng = np.random.default_rng(seed)
-        sizes = rng.integers(10, int(capacity * 0.6), size=n_items).astype(float)
+        max_size = max(int(capacity * 0.6), 11)
+        sizes = rng.integers(10, max_size, size=n_items).astype(float)
         return cls(sizes, capacity, instance_name=f"BP-rand-{n_items}")
 
     # ---- Problem interface -------------------------------------------------

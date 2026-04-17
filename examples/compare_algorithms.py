@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Compare Algorithms — benchmark all algorithms across all 3 problem types.
+Benchmark Demo — compare all algorithms across all 3 problem types.
+
+Uses the benchmark runner for structured output with CSV/JSON export.
 
 Usage:
     python examples/compare_algorithms.py
 """
 
-import sys
-import os
-
+import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from heurkit.kernels.tsp.problem import TSPProblem
@@ -19,77 +19,74 @@ from heurkit.algorithms.hill_climb import HillClimbing
 from heurkit.algorithms.simulated_annealing import SimulatedAnnealing
 from heurkit.algorithms.tabu import TabuSearch
 from heurkit.algorithms.iterated_local_search import IteratedLocalSearch
+from heurkit.algorithms.vns import VariableNeighborhoodSearch
 from heurkit.portfolio.auto import AutoSolver
-from heurkit.utils.metrics import results_table
-from heurkit.core.result import SearchResult
+from heurkit.benchmark.runner import BenchmarkConfig, run_benchmark
 
 
-def run_all_algorithms(problem, time_limit: float = 1.5, seed: int = 42) -> list[SearchResult]:
-    """Run every algorithm on a problem and return results."""
-    algorithms = [
-        GreedyConstructor(seed=seed),
-        HillClimbing(max_seconds=time_limit, seed=seed),
-        SimulatedAnnealing(max_seconds=time_limit, seed=seed),
-        TabuSearch(max_seconds=time_limit, seed=seed),
-        IteratedLocalSearch(max_seconds=time_limit, seed=seed),
-    ]
-    results = []
-    for algo in algorithms:
-        result = algo.solve(problem)
-        results.append(result)
-    return results
+SEED = 42
+TIME = 1.5
 
 
 def main() -> None:
     print("=" * 70)
-    print("  HeurKit — Cross-Domain Algorithm Comparison")
+    print("  HeurKit — Cross-Domain Algorithm Benchmark")
     print("=" * 70)
 
-    SEED = 42
-    TIME = 1.5
+    problems = [
+        TSPProblem.generate_random(n_cities=25, seed=SEED),
+        CVRPProblem.generate_random(n_customers=15, capacity=50.0, seed=SEED),
+        BinPackingProblem.generate_random(n_items=30, capacity=100.0, seed=SEED),
+    ]
 
-    # --- TSP ---
-    tsp = TSPProblem.generate_random(n_cities=25, seed=SEED)
-    print(f"\n▶ {tsp.name()} ({tsp.size()} cities)")
-    tsp_results = run_all_algorithms(tsp, time_limit=TIME, seed=SEED)
+    algorithms = [
+        GreedyConstructor(seed=SEED),
+        HillClimbing(time_limit=TIME, seed=SEED),
+        SimulatedAnnealing(time_limit=TIME, seed=SEED),
+        TabuSearch(time_limit=TIME, seed=SEED),
+        IteratedLocalSearch(time_limit=TIME, seed=SEED),
+        VariableNeighborhoodSearch(time_limit=TIME, seed=SEED),
+    ]
 
-    # AutoSolver
-    auto_result = AutoSolver(time_limit=TIME, seed=SEED).solve(tsp)
-    auto_result.algorithm_name = "AutoSolver"
-    tsp_results.append(auto_result)
-    print(results_table(tsp_results))
+    os.makedirs("output", exist_ok=True)
 
-    # --- CVRP ---
-    cvrp = CVRPProblem.generate_random(n_customers=15, capacity=50.0, seed=SEED)
-    print(f"\n▶ {cvrp.name()} ({cvrp.size()} customers)")
-    cvrp_results = run_all_algorithms(cvrp, time_limit=TIME, seed=SEED)
+    config = BenchmarkConfig(
+        name="cross_domain",
+        problems=problems,
+        algorithms=algorithms,
+        output_dir="output",
+    )
 
-    auto_result = AutoSolver(time_limit=TIME, seed=SEED).solve(cvrp)
-    auto_result.algorithm_name = "AutoSolver"
-    cvrp_results.append(auto_result)
-    print(results_table(cvrp_results))
+    print("\nRunning benchmark...")
+    bench = run_benchmark(config)
 
-    # --- Bin Packing ---
-    bp = BinPackingProblem.generate_random(n_items=30, capacity=100.0, seed=SEED)
-    print(f"\n▶ {bp.name()} ({bp.size()} items)")
-    bp_results = run_all_algorithms(bp, time_limit=TIME, seed=SEED)
+    print(f"\nCompleted in {bench.wall_time:.2f}s\n")
+    print(bench.summary_table())
 
-    auto_result = AutoSolver(time_limit=TIME, seed=SEED).solve(bp)
-    auto_result.algorithm_name = "AutoSolver"
-    bp_results.append(auto_result)
-    print(results_table(bp_results))
+    # Also run AutoSolver for comparison
+    print("\n--- AutoSolver ---")
+    for problem in problems:
+        result = AutoSolver(time_limit=TIME, seed=SEED).solve(problem)
+        feas = "✓" if result.is_feasible else "✗"
+        print(f"  {problem.name():<20s}  obj={result.best_objective:>10.2f}  {feas}  by {result.algorithm_name}")
 
-    # Convergence plots (optional)
+    # Convergence plots
     try:
         from heurkit.utils.plotting import plot_convergence
-        plot_convergence(tsp_results[1:5], title="TSP Convergence", save_path="tsp_convergence.png")
-        plot_convergence(cvrp_results[1:5], title="CVRP Convergence", save_path="cvrp_convergence.png")
-        plot_convergence(bp_results[1:5], title="Bin Packing Convergence", save_path="bp_convergence.png")
-        print("\nConvergence plots saved to *_convergence.png")
+        # Group results by problem
+        for problem in problems:
+            pname = problem.name()
+            prob_results = [r for r in bench.results if r.problem_name == pname and len(r.history) > 2]
+            if prob_results:
+                plot_convergence(
+                    prob_results,
+                    title=f"{pname} — Convergence",
+                    save_path=f"output/{pname.lower().replace('-','_')}_convergence.png",
+                )
     except Exception as e:
         print(f"\n(Plotting skipped: {e})")
 
-    print("\n✓ Benchmark complete.")
+    print(f"\n✓ Results saved to output/cross_domain.csv and output/cross_domain.json")
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ import pytest
 from heurkit.core.stopping import StoppingCriteria
 from heurkit.core.result import SearchResult
 from heurkit.core.evaluator import Evaluation, Evaluator
+from heurkit.core.callbacks import HistoryCallback, LoggingCallback
 
 
 class TestStoppingCriteria:
@@ -43,6 +44,11 @@ class TestStoppingCriteria:
             sc.step(False)
         assert sc.iteration == 10
 
+    def test_elapsed_is_positive(self):
+        sc = StoppingCriteria()
+        sc.start()
+        assert sc.elapsed >= 0
+
 
 class TestSearchResult:
     def test_summary(self):
@@ -63,6 +69,32 @@ class TestSearchResult:
         assert "42.5" in s
         assert r.iterations == 100
 
+    def test_to_dict_keys(self):
+        from heurkit.kernels.tsp.solution import TSPSolution
+        sol = TSPSolution([0, 1, 2])
+        r = SearchResult(
+            algorithm_name="A", problem_name="P",
+            best_solution=sol, best_objective=1.0,
+            is_feasible=True, iterations=1, runtime_seconds=0.1,
+        )
+        d = r.to_dict()
+        assert "algorithm_name" in d
+        assert "best_objective" in d
+        assert "is_feasible" in d
+        assert isinstance(d["best_objective"], float)
+
+    def test_to_json_roundtrip(self):
+        import json
+        from heurkit.kernels.tsp.solution import TSPSolution
+        sol = TSPSolution([0, 1, 2])
+        r = SearchResult(
+            algorithm_name="A", problem_name="P",
+            best_solution=sol, best_objective=1.0,
+            is_feasible=True, iterations=1, runtime_seconds=0.1,
+        )
+        parsed = json.loads(r.to_json())
+        assert parsed["algorithm_name"] == "A"
+
 
 class TestEvaluation:
     def test_is_better_minimisation(self):
@@ -78,6 +110,31 @@ class TestEvaluation:
         ev = _DummyEvaluator()
         assert ev.is_better(feasible, infeasible)
         assert not ev.is_better(infeasible, feasible)
+
+    def test_python_native_types(self):
+        """Evaluation should coerce numpy types to Python native."""
+        import numpy as np
+        e = Evaluation(objective=np.float64(42.0), is_feasible=np.bool_(True))
+        assert type(e.objective) is float
+        assert type(e.is_feasible) is bool
+
+    def test_is_identity_works(self):
+        """After coercion, `is True` / `is False` should work."""
+        e = Evaluation(objective=1.0, is_feasible=True)
+        assert e.is_feasible is True
+        e2 = Evaluation(objective=1.0, is_feasible=False)
+        assert e2.is_feasible is False
+
+
+class TestCallbackInstantiation:
+    def test_history_callback(self):
+        cb = HistoryCallback()
+        assert cb.events == []
+
+    def test_logging_callback_no_crash(self):
+        cb = LoggingCallback(interval=100)
+        # Just verify it can be created without errors
+        assert cb.interval == 100
 
 
 class _DummyEvaluator(Evaluator):

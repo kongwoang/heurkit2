@@ -7,9 +7,9 @@ Accepts worse moves with a probability that decreases over time
 
 from __future__ import annotations
 
+import logging
 import math
-import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence
 
 from heurkit.core.random_state import make_rng
 from heurkit.core.result import SearchResult
@@ -17,9 +17,12 @@ from heurkit.core.runtime import SearchAlgorithm
 from heurkit.core.stopping import StoppingCriteria
 
 if TYPE_CHECKING:
+    from heurkit.core.callbacks import SearchCallback
     from heurkit.core.evaluator import Evaluator
     from heurkit.core.problem import Problem
     from heurkit.core.runtime import Constructor, NeighborhoodGenerator
+
+logger = logging.getLogger("heurkit.algorithms")
 
 
 class SimulatedAnnealing(SearchAlgorithm):
@@ -37,8 +40,12 @@ class SimulatedAnnealing(SearchAlgorithm):
         Iteration limit.
     max_seconds : float
         Time limit.
+    no_improvement_limit : int
+        Stagnation limit.
     seed : int or None
         Random seed.
+    time_limit : float or None
+        Alias for *max_seconds*.
     """
 
     def __init__(
@@ -57,7 +64,7 @@ class SimulatedAnnealing(SearchAlgorithm):
         self.min_temp = min_temp
         self.stopping = StoppingCriteria(
             max_iterations=max_iterations,
-            max_seconds=time_limit or max_seconds,
+            max_seconds=time_limit if time_limit is not None else max_seconds,
             no_improvement_iterations=no_improvement_limit,
         )
         self.seed = seed
@@ -70,7 +77,9 @@ class SimulatedAnnealing(SearchAlgorithm):
         constructor: Constructor | None = None,
         evaluator: Evaluator | None = None,
         neighborhood: NeighborhoodGenerator | None = None,
+        callbacks: Sequence[SearchCallback] | None = None,
     ) -> SearchResult:
+        cbs = callbacks or []
         constructor, evaluator, neighborhood = self._resolve_components(
             problem, constructor, evaluator, neighborhood
         )
@@ -82,6 +91,7 @@ class SimulatedAnnealing(SearchAlgorithm):
         history: list[float] = [best_eval.objective]
 
         temp = self.initial_temp
+        logger.info("SA started on %s (T0=%.2f, obj=%.4f)", problem.name(), temp, best_eval.objective)
         self.stopping.start()
 
         while not self.stopping.should_stop():
@@ -101,7 +111,7 @@ class SimulatedAnnealing(SearchAlgorithm):
             if delta < 0:
                 accept = True
             elif temp > self.min_temp:
-                prob = math.exp(-delta / temp)
+                prob = math.exp(-delta / max(temp, 1e-12))
                 if float(self.rng.random()) < prob:
                     accept = True
 
@@ -113,10 +123,14 @@ class SimulatedAnnealing(SearchAlgorithm):
                     best = current.copy()
                     best_eval = current_eval
                     improved = True
+                    self._fire_new_best(cbs, self.stopping.iteration, best, best_eval)
 
             temp *= self.cooling_rate
             self.stopping.step(improved)
+            self._fire_iteration(cbs, self.stopping.iteration, current, current_eval, best, best_eval)
             history.append(best_eval.objective)
+
+        logger.info("SA finished: obj=%.4f iters=%d T_final=%.6f", best_eval.objective, self.stopping.iteration, temp)
 
         return SearchResult(
             algorithm_name="SimulatedAnnealing",

@@ -12,15 +12,20 @@ heurkit.core.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Iterator, Protocol
+from typing import TYPE_CHECKING, Iterator, Protocol, Sequence
 
 if TYPE_CHECKING:
-    from heurkit.core.evaluator import Evaluator
+    from heurkit.core.callbacks import SearchCallback
+    from heurkit.core.evaluator import Evaluation, Evaluator
     from heurkit.core.move import Move
     from heurkit.core.problem import Problem
     from heurkit.core.result import SearchResult
     from heurkit.core.solution import Solution
+
+
+logger = logging.getLogger("heurkit")
 
 
 # ---------------------------------------------------------------------------
@@ -60,11 +65,36 @@ class SearchAlgorithm(ABC):
         constructor: Constructor | None = None,
         evaluator: Evaluator | None = None,
         neighborhood: NeighborhoodGenerator | None = None,
+        callbacks: Sequence[SearchCallback] | None = None,
     ) -> SearchResult:
         """Run the search and return a :class:`SearchResult`."""
 
-    # Convenience: allow algorithms to resolve defaults from a problem
-    # if the problem carries kernel-provided defaults.
+    # ---- helper: fire callbacks ---------------------------------------------
+
+    @staticmethod
+    def _fire_iteration(
+        callbacks: Sequence[SearchCallback],
+        iteration: int,
+        current: Solution,
+        current_eval: Evaluation,
+        best: Solution,
+        best_eval: Evaluation,
+    ) -> None:
+        for cb in callbacks:
+            cb.on_iteration(iteration, current, current_eval, best, best_eval)
+
+    @staticmethod
+    def _fire_new_best(
+        callbacks: Sequence[SearchCallback],
+        iteration: int,
+        solution: Solution,
+        evaluation: Evaluation,
+    ) -> None:
+        for cb in callbacks:
+            cb.on_new_best(iteration, solution, evaluation)
+
+    # ---- helper: resolve kernel defaults ------------------------------------
+
     @staticmethod
     def _resolve_components(
         problem: Problem,

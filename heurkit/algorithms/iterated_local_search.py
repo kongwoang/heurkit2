@@ -7,8 +7,8 @@ to escape local optima.
 
 from __future__ import annotations
 
-import time
-from typing import TYPE_CHECKING
+import logging
+from typing import TYPE_CHECKING, Sequence
 
 from heurkit.core.random_state import make_rng
 from heurkit.core.result import SearchResult
@@ -16,9 +16,12 @@ from heurkit.core.runtime import SearchAlgorithm
 from heurkit.core.stopping import StoppingCriteria
 
 if TYPE_CHECKING:
+    from heurkit.core.callbacks import SearchCallback
     from heurkit.core.evaluator import Evaluator
     from heurkit.core.problem import Problem
     from heurkit.core.runtime import Constructor, NeighborhoodGenerator
+
+logger = logging.getLogger("heurkit.algorithms")
 
 
 class IteratedLocalSearch(SearchAlgorithm):
@@ -34,8 +37,12 @@ class IteratedLocalSearch(SearchAlgorithm):
         Number of ILS outer iterations.
     max_seconds : float
         Time limit.
+    no_improvement_limit : int
+        Stagnation limit.
     seed : int or None
         Random seed.
+    time_limit : float or None
+        Alias for *max_seconds*.
     """
 
     def __init__(
@@ -52,15 +59,13 @@ class IteratedLocalSearch(SearchAlgorithm):
         self.local_search_iters = local_search_iters
         self.stopping = StoppingCriteria(
             max_iterations=max_iterations,
-            max_seconds=time_limit or max_seconds,
+            max_seconds=time_limit if time_limit is not None else max_seconds,
             no_improvement_iterations=no_improvement_limit,
         )
         self.seed = seed
         self.rng = make_rng(seed)
 
-    def _local_search(
-        self, solution, evaluator, neighborhood, max_iters: int
-    ):
+    def _local_search(self, solution, evaluator, neighborhood, max_iters: int):
         """Run a quick first-improvement hill climb."""
         current = solution
         current_eval = evaluator.evaluate(current)
@@ -103,7 +108,9 @@ class IteratedLocalSearch(SearchAlgorithm):
         constructor: Constructor | None = None,
         evaluator: Evaluator | None = None,
         neighborhood: NeighborhoodGenerator | None = None,
+        callbacks: Sequence[SearchCallback] | None = None,
     ) -> SearchResult:
+        cbs = callbacks or []
         constructor, evaluator, neighborhood = self._resolve_components(
             problem, constructor, evaluator, neighborhood
         )
@@ -117,6 +124,7 @@ class IteratedLocalSearch(SearchAlgorithm):
         best_eval = current_eval
         history: list[float] = [best_eval.objective]
 
+        logger.info("ILS started on %s (obj=%.4f)", problem.name(), best_eval.objective)
         self.stopping.start()
 
         while not self.stopping.should_stop():
@@ -137,9 +145,13 @@ class IteratedLocalSearch(SearchAlgorithm):
                 best = candidate.copy()
                 best_eval = cand_eval
                 improved = True
+                self._fire_new_best(cbs, self.stopping.iteration, best, best_eval)
 
             self.stopping.step(improved)
+            self._fire_iteration(cbs, self.stopping.iteration, current, current_eval, best, best_eval)
             history.append(best_eval.objective)
+
+        logger.info("ILS finished: obj=%.4f iters=%d", best_eval.objective, self.stopping.iteration)
 
         return SearchResult(
             algorithm_name="IteratedLocalSearch",
