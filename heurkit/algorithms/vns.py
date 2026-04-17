@@ -122,7 +122,7 @@ class VariableNeighborhoodSearch(SearchAlgorithm):
     ) -> SearchResult:
         cbs = callbacks or []
         constructor, evaluator, default_nbr = self._resolve_components(
-            problem, constructor, evaluator, neighborhood
+            problem, constructor, evaluator, neighborhood, seed=self.seed
         )
 
         # Build the list of neighbourhoods
@@ -138,7 +138,7 @@ class VariableNeighborhoodSearch(SearchAlgorithm):
         current_eval = evaluator.evaluate(current)
         best = current.copy()
         best_eval = current_eval
-        history: list[float] = [best_eval.objective]
+        history: list[float] = [self._objective_for_result(evaluator, best_eval)]
 
         logger.info(
             "VNS started on %s (k_max=%d, obj=%.4f)",
@@ -176,7 +176,7 @@ class VariableNeighborhoodSearch(SearchAlgorithm):
 
             self.stopping.step(improved_outer)
             self._fire_iteration(cbs, self.stopping.iteration, current, current_eval, best, best_eval)
-            history.append(best_eval.objective)
+            history.append(self._objective_for_result(evaluator, best_eval))
 
         logger.info("VNS finished: obj=%.4f iters=%d", best_eval.objective, self.stopping.iteration)
 
@@ -184,10 +184,13 @@ class VariableNeighborhoodSearch(SearchAlgorithm):
             algorithm_name="VNS",
             problem_name=problem.name(),
             best_solution=best,
-            best_objective=best_eval.objective,
+            best_objective=self._objective_for_result(evaluator, best_eval),
             is_feasible=best_eval.is_feasible,
             iterations=self.stopping.iteration,
             runtime_seconds=self.stopping.elapsed,
             history=history,
-            metadata={"k_max": k_max},
+            metadata={
+                "k_max": k_max,
+                "comparable_best_objective": float(best_eval.objective),
+            },
         )

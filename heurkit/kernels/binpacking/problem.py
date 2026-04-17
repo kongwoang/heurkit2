@@ -91,8 +91,8 @@ class BinPackingProblem(Problem):
     def default_evaluator(self) -> BinPackingEvaluator:
         return BinPackingEvaluator(self)
 
-    def default_constructor(self) -> FirstFitDecreasingConstructor:
+    def default_constructor(self, seed: int | None = None) -> FirstFitDecreasingConstructor:
         return FirstFitDecreasingConstructor(self)
 
-    def default_neighborhood(self) -> BinPackingNeighborhood:
-        return BinPackingNeighborhood(self)
+    def default_neighborhood(self, seed: int | None = None) -> BinPackingNeighborhood:
+        return BinPackingNeighborhood(self, seed=seed)

@@ -42,21 +42,23 @@ class GreedyConstructor(SearchAlgorithm):
         callbacks: Sequence[SearchCallback] | None = None,
     ) -> SearchResult:
         constructor, evaluator, _ = self._resolve_components(
-            problem, constructor, evaluator, neighborhood
+            problem, constructor, evaluator, neighborhood, seed=self.seed
         )
 
         t0 = time.perf_counter()
         solution = constructor.construct(problem)
         evaluation = evaluator.evaluate(solution)
         elapsed = time.perf_counter() - t0
+        result_objective = self._objective_for_result(evaluator, evaluation)
 
         return SearchResult(
             algorithm_name="GreedyConstructor",
             problem_name=problem.name(),
             best_solution=solution,
-            best_objective=evaluation.objective,
+            best_objective=result_objective,
             is_feasible=evaluation.is_feasible,
             iterations=1,
             runtime_seconds=elapsed,
-            history=[evaluation.objective],
+            history=[result_objective],
+            metadata={"comparable_best_objective": float(evaluation.objective)},
         )

@@ -31,6 +31,13 @@ PRESETS: dict[str, dict[str, type]] = {
         "SimulatedAnnealing": SimulatedAnnealing,
         "VNS": VariableNeighborhoodSearch,
     },
+    "custom": {
+        "HillClimbing": HillClimbing,
+        "TabuSearch": TabuSearch,
+        "SimulatedAnnealing": SimulatedAnnealing,
+        "IteratedLocalSearch": IteratedLocalSearch,
+        "VNS": VariableNeighborhoodSearch,
+    },
 }
 
 # Default algorithm picks per problem type
@@ -38,6 +45,7 @@ DEFAULT_PICKS: dict[str, list[str]] = {
     "tsp": ["HillClimbing", "SimulatedAnnealing"],
     "cvrp": ["HillClimbing", "TabuSearch"],
     "binpacking": ["HillClimbing", "IteratedLocalSearch"],
+    "custom": ["HillClimbing", "TabuSearch"],
 }
 
 
@@ -66,7 +74,7 @@ def get_preset_algorithms(
     Parameters
     ----------
     problem_type : str
-        One of 'tsp', 'cvrp', 'binpacking'.
+        One of 'tsp', 'cvrp', 'binpacking', 'custom'.
     time_limit : float
         Per-algorithm time limit in seconds.
     seed : int or None

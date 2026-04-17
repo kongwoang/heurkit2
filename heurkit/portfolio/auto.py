@@ -8,13 +8,14 @@ optimization.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from heurkit.core.result import SearchResult
 from heurkit.portfolio.presets import get_preset_algorithms, list_presets
 
 if TYPE_CHECKING:
     from heurkit.core.problem import Problem
+    from heurkit.custom.problem import CustomProblem
 
 logger = logging.getLogger("heurkit.auto")
 
@@ -47,6 +48,7 @@ class AutoSolver:
         "TSPProblem": "tsp",
         "CVRPProblem": "cvrp",
         "BinPackingProblem": "binpacking",
+        "CustomProblem": "custom",
     }
 
     def __init__(
@@ -78,11 +80,35 @@ class AutoSolver:
         """List available algorithm presets per problem type."""
         return list_presets(problem_type)
 
+    def _select_custom_picks(self, problem: CustomProblem) -> list[str]:
+        if self.picks is not None:
+            return self.picks
+        if problem.has_feasibility or problem.has_repair:
+            return ["TabuSearch", "SimulatedAnnealing"]
+        return ["HillClimbing", "TabuSearch"]
+
+    @staticmethod
+    def _result_rank(result: SearchResult) -> float:
+        raw = result.metadata.get("comparable_best_objective", result.best_objective)
+        return float(raw)
+
+    @classmethod
+    def _is_better_result(cls, candidate: SearchResult, incumbent: SearchResult) -> bool:
+        if candidate.is_feasible and not incumbent.is_feasible:
+            return True
+        if not candidate.is_feasible and incumbent.is_feasible:
+            return False
+        return cls._result_rank(candidate) < cls._result_rank(incumbent)
+
     def solve(self, problem: Problem) -> SearchResult:
         """Run preset algorithms and return the best result."""
         pt = self.problem_type or self._infer_type(problem)
+        picks = self.picks
+        if pt == "custom":
+            custom_problem = cast("CustomProblem", problem)
+            picks = self._select_custom_picks(custom_problem)
         algorithms = get_preset_algorithms(
-            pt, time_limit=self.time_limit, seed=self.seed, picks=self.picks
+            pt, time_limit=self.time_limit, seed=self.seed, picks=picks
         )
 
         all_results: list[SearchResult] = []
@@ -93,16 +119,14 @@ class AutoSolver:
             result = algo.solve(problem)
             all_results.append(result)
 
-            if best_result is None or (
-                result.is_feasible
-                and result.best_objective < best_result.best_objective
-            ):
+            if best_result is None or self._is_better_result(result, best_result):
                 best_result = result
 
         assert best_result is not None
         best_result.metadata["auto_solver"] = True
         best_result.metadata["problem_type"] = pt
         best_result.metadata["n_trials"] = len(all_results)
+        best_result.metadata["auto_picks"] = picks or []
         if self.return_all:
             best_result.metadata["all_results"] = [r.to_dict() for r in all_results]
 

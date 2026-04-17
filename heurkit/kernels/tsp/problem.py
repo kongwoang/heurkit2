@@ -96,8 +96,8 @@ class TSPProblem(Problem):
     def default_evaluator(self) -> TSPEvaluator:
         return TSPEvaluator(self)
 
-    def default_constructor(self) -> NearestNeighborConstructor:
+    def default_constructor(self, seed: int | None = None) -> NearestNeighborConstructor:
         return NearestNeighborConstructor(self)
 
-    def default_neighborhood(self) -> TSPNeighborhood:
-        return TSPNeighborhood(self)
+    def default_neighborhood(self, seed: int | None = None) -> TSPNeighborhood:
+        return TSPNeighborhood(self, seed=seed)

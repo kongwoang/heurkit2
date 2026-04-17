@@ -12,6 +12,7 @@ heurkit.core.
 
 from __future__ import annotations
 
+import inspect
 import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Iterator, Protocol, Sequence
@@ -101,6 +102,7 @@ class SearchAlgorithm(ABC):
         constructor: Constructor | None,
         evaluator: Evaluator | None,
         neighborhood: NeighborhoodGenerator | None,
+        seed: int | None = None,
     ) -> tuple[Constructor, Evaluator, NeighborhoodGenerator]:
         """Resolve constructor / evaluator / neighbourhood.
 
@@ -108,17 +110,58 @@ class SearchAlgorithm(ABC):
         ``problem.default_evaluator()``, ``problem.default_neighborhood()``.
         """
         if constructor is None:
-            constructor = getattr(problem, "default_constructor", lambda: None)()
+            constructor = SearchAlgorithm._call_problem_factory(
+                problem, "default_constructor", seed=seed
+            )
             if constructor is None:
                 raise ValueError("No constructor provided and problem has no default.")
         if evaluator is None:
-            evaluator = getattr(problem, "default_evaluator", lambda: None)()
+            evaluator = SearchAlgorithm._call_problem_factory(
+                problem, "default_evaluator", seed=None
+            )
             if evaluator is None:
                 raise ValueError("No evaluator provided and problem has no default.")
         if neighborhood is None:
-            neighborhood = getattr(problem, "default_neighborhood", lambda: None)()
+            neighborhood = SearchAlgorithm._call_problem_factory(
+                problem, "default_neighborhood", seed=seed
+            )
             if neighborhood is None:
                 raise ValueError(
                     "No neighborhood provided and problem has no default."
                 )
         return constructor, evaluator, neighborhood
+
+    @staticmethod
+    def _call_problem_factory(problem: Problem, factory_name: str, seed: int | None):
+        factory = getattr(problem, factory_name, None)
+        if not callable(factory):
+            return None
+        if seed is not None and SearchAlgorithm._accepts_seed(factory):
+            return factory(seed=seed)
+        return factory()
+
+    @staticmethod
+    def _accepts_seed(factory) -> bool:
+        try:
+            signature = inspect.signature(factory)
+        except (TypeError, ValueError):
+            return False
+
+        if "seed" in signature.parameters:
+            return True
+        for param in signature.parameters.values():
+            if param.kind is inspect.Parameter.VAR_KEYWORD:
+                return True
+        return False
+
+    @staticmethod
+    def _objective_for_result(evaluator: Evaluator, evaluation: Evaluation) -> float:
+        """Return objective value used in public SearchResult/history outputs."""
+        if hasattr(evaluator, "objective_for_result"):
+            objective_for_result = getattr(evaluator, "objective_for_result")
+            if callable(objective_for_result):
+                try:
+                    return float(objective_for_result(evaluation))
+                except Exception:
+                    pass
+        return float(evaluation.objective)

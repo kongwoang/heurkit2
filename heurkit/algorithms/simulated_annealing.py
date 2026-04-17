@@ -81,14 +81,14 @@ class SimulatedAnnealing(SearchAlgorithm):
     ) -> SearchResult:
         cbs = callbacks or []
         constructor, evaluator, neighborhood = self._resolve_components(
-            problem, constructor, evaluator, neighborhood
+            problem, constructor, evaluator, neighborhood, seed=self.seed
         )
 
         current = constructor.construct(problem)
         current_eval = evaluator.evaluate(current)
         best = current.copy()
         best_eval = current_eval
-        history: list[float] = [best_eval.objective]
+        history: list[float] = [self._objective_for_result(evaluator, best_eval)]
 
         temp = self.initial_temp
         logger.info("SA started on %s (T0=%.2f, obj=%.4f)", problem.name(), temp, best_eval.objective)
@@ -128,7 +128,7 @@ class SimulatedAnnealing(SearchAlgorithm):
             temp *= self.cooling_rate
             self.stopping.step(improved)
             self._fire_iteration(cbs, self.stopping.iteration, current, current_eval, best, best_eval)
-            history.append(best_eval.objective)
+            history.append(self._objective_for_result(evaluator, best_eval))
 
         logger.info("SA finished: obj=%.4f iters=%d T_final=%.6f", best_eval.objective, self.stopping.iteration, temp)
 
@@ -136,10 +136,13 @@ class SimulatedAnnealing(SearchAlgorithm):
             algorithm_name="SimulatedAnnealing",
             problem_name=problem.name(),
             best_solution=best,
-            best_objective=best_eval.objective,
+            best_objective=self._objective_for_result(evaluator, best_eval),
             is_feasible=best_eval.is_feasible,
             iterations=self.stopping.iteration,
             runtime_seconds=self.stopping.elapsed,
             history=history,
-            metadata={"final_temp": temp},
+            metadata={
+                "final_temp": temp,
+                "comparable_best_objective": float(best_eval.objective),
+            },
         )

@@ -66,7 +66,7 @@ class HillClimbing(SearchAlgorithm):
     ) -> SearchResult:
         cbs = callbacks or []
         constructor, evaluator, neighborhood = self._resolve_components(
-            problem, constructor, evaluator, neighborhood
+            problem, constructor, evaluator, neighborhood, seed=self.seed
         )
 
         # Build initial solution
@@ -74,7 +74,7 @@ class HillClimbing(SearchAlgorithm):
         current_eval = evaluator.evaluate(current)
         best = current.copy()
         best_eval = current_eval
-        history: list[float] = [best_eval.objective]
+        history: list[float] = [self._objective_for_result(evaluator, best_eval)]
 
         logger.info("HillClimbing started on %s (obj=%.4f)", problem.name(), best_eval.objective)
         self.stopping.start()
@@ -99,7 +99,7 @@ class HillClimbing(SearchAlgorithm):
 
             self.stopping.step(improved)
             self._fire_iteration(cbs, self.stopping.iteration, current, current_eval, best, best_eval)
-            history.append(best_eval.objective)
+            history.append(self._objective_for_result(evaluator, best_eval))
 
         logger.info("HillClimbing finished: obj=%.4f iters=%d", best_eval.objective, self.stopping.iteration)
 
@@ -107,9 +107,10 @@ class HillClimbing(SearchAlgorithm):
             algorithm_name="HillClimbing",
             problem_name=problem.name(),
             best_solution=best,
-            best_objective=best_eval.objective,
+            best_objective=self._objective_for_result(evaluator, best_eval),
             is_feasible=best_eval.is_feasible,
             iterations=self.stopping.iteration,
             runtime_seconds=self.stopping.elapsed,
             history=history,
+            metadata={"comparable_best_objective": float(best_eval.objective)},
         )

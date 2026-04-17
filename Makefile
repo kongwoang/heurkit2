@@ -11,6 +11,9 @@ examples:
 	python examples/cvrp_demo.py
 	python examples/binpacking_demo.py
 	python examples/auto_demo.py
+	python examples/custom_problem_minimal_demo.py
+	python examples/custom_assignment_demo.py
+	python examples/custom_partition_demo.py
 
 benchmark:
 	python examples/compare_algorithms.py

@@ -120,8 +120,8 @@ class CVRPProblem(Problem):
     def default_evaluator(self) -> CVRPEvaluator:
         return CVRPEvaluator(self)
 
-    def default_constructor(self) -> GreedySequentialConstructor:
+    def default_constructor(self, seed: int | None = None) -> GreedySequentialConstructor:
         return GreedySequentialConstructor(self)
 
-    def default_neighborhood(self) -> CVRPNeighborhood:
-        return CVRPNeighborhood(self)
+    def default_neighborhood(self, seed: int | None = None) -> CVRPNeighborhood:
+        return CVRPNeighborhood(self, seed=seed)
